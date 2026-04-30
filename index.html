@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DIAPS — Distributed IoT Air Purification System | Live Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base: #0a0e0d;
+    --bg-panel: #131816;
+    --bg-elev:  #1a201d;
+    --bg-hover: #222a26;
+    --line:     #2a312d;
+    --text:     #e7eae6;
+    --text-mid: #aab1ac;
+    --text-dim: #6b716d;
+    --accent:   #a3e635;       /* lemongrass lime */
+    --accent-d: #84cc16;
+    --accent-glow: rgba(163, 230, 53, 0.35);
+    --warn:     #f59e0b;
+    --danger:   #ef4444;
+    --info:     #06b6d4;
+    --pm:       #60a5fa;       /* PM2.5 blue */
+    --mb:       #c084fc;       /* microbes purple */
+    --gas:      #fb923c;       /* gas orange */
+    --hum:      #22d3ee;       /* humidity cyan */
+    --who-line: #06b6d4;
+    --shadow:   0 1px 0 rgba(255,255,255,0.03), 0 8px 24px -8px rgba(0,0,0,0.5);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg-base);
+    color: var(--text);
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(163,230,53,0.06), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 100%, rgba(6,182,212,0.04), transparent);
+  }
+  .mono { font-family: 'JetBrains Mono', monospace; font-feature-settings: "ss02", "cv11"; }
+
+  /* ───────────────────── HEADER ───────────────────── */
+  header {
+    border-bottom: 1px solid var(--line);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    background: rgba(10,14,13,0.7);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-mark {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-d));
+    display: grid; place-items: center;
+    color: #0a0e0d; font-weight: 800; font-size: 16px;
+    box-shadow: 0 0 24px var(--accent-glow);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .brand-title { font-weight: 700; letter-spacing: -0.01em; font-size: 15px; }
+  .brand-sub   { color: var(--text-dim); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  .live-readings { display: flex; gap: 10px; flex-wrap: wrap; }
+  .reading {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 14px;
+    min-width: 130px;
+  }
+  .reading-label {
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .reading-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .reading-dot.warn { background: var(--warn); }
+  .reading-dot.danger { background: var(--danger); }
+  .reading-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px; font-weight: 600;
+    margin-top: 2px;
+    display: flex; align-items: baseline; gap: 4px;
+  }
+  .reading-unit { font-size: 11px; color: var(--text-dim); font-weight: 400; }
+
+  /* ───────────────────── LAYOUT ───────────────────── */
+  main {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 16px;
+    padding: 16px 28px;
+    min-height: calc(100vh - 76px);
+  }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+
+  .stage { display: grid; grid-template-rows: minmax(380px, 1fr) auto; gap: 16px; }
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  .panel-head {
+    padding: 14px 18px;
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--line);
+  }
+  .panel-title { font-weight: 600; font-size: 13px; letter-spacing: 0.02em; }
+  .panel-tag {
+    color: var(--text-dim);
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    font-weight: 600;
+  }
+  .panel-body { padding: 16px 18px; }
+
+  /* ───────────────────── 3D STAGE ───────────────────── */
+  #stage3d {
+    position: relative;
+    background:
+      radial-gradient(ellipse at 50% 50%, #1a2520 0%, #0a0e0d 70%);
+    overflow: hidden;
+  }
+  #threecanvas { width: 100%; height: 100%; display: block; }
+  .stage-overlay {
+    position: absolute; pointer-events: none;
+    top: 14px; left: 14px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .overlay-chip {
+    background: rgba(19,24,22,0.82);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--text-mid);
+    backdrop-filter: blur(8px);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .stage-controls {
+    position: absolute;
+    bottom: 14px; right: 14px;
+    display: flex; gap: 6px;
+    background: rgba(19,24,22,0.82);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 4px;
+  }
+  .stage-controls button {
+    background: transparent;
+    border: none;
+    color: var(--text-mid);
+    padding: 6px 10px;
+    font-size: 11px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    transition: all 0.15s;
+  }
+  .stage-controls button:hover { background: var(--bg-hover); color: var(--text); }
+  .stage-controls button.active { background: var(--accent); color: #0a0e0d; }
+
+  .stage-legend {
+    position: absolute;
+    top: 14px; right: 14px;
+    background: rgba(19,24,22,0.82);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    backdrop-filter: blur(8px);
+    font-size: 11px;
+  }
+  .legend-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ───────────────────── CHART ───────────────────── */
+  #chart-panel { min-height: 280px; }
+  #chart-svg { width: 100%; height: 220px; }
+  .chart-legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 8px 18px 0; }
+  .chart-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-mid); }
+  .chart-legend-line { width: 16px; height: 2px; border-radius: 2px; }
+
+  /* ───────────────────── CONTROLS ───────────────────── */
+  .control-stack { display: flex; flex-direction: column; gap: 16px; }
+
+  /* Modules grid */
+  .modules { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px; }
+  .module {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .module:hover { border-color: var(--accent); }
+  .module.active { border-color: var(--accent); background: linear-gradient(180deg, rgba(163,230,53,0.06), transparent); }
+  .module.fault { border-color: var(--danger); opacity: 0.6; }
+  .module.fault::after {
+    content: 'FAULT';
+    position: absolute; top: 8px; right: 8px;
+    font-size: 9px; letter-spacing: 0.1em;
+    color: var(--danger); font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .module-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .module-icon {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: var(--bg-base);
+    display: grid; place-items: center;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700;
+  }
+  .module.fault .module-icon { color: var(--danger); }
+  .module-name { font-weight: 600; font-size: 12px; }
+  .module-spec { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+  .module-status {
+    margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .module.fault .module-status { color: var(--danger); }
+  .pulse { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; } 50% { opacity: 0.5; box-shadow: 0 0 0 6px transparent; } }
+
+  /* Sliders */
+  .sliders { padding: 6px 18px 14px; }
+  .slider-row { display: grid; grid-template-columns: 110px 1fr 60px; align-items: center; gap: 12px; padding: 8px 0; }
+  .slider-row + .slider-row { border-top: 1px dashed var(--line); }
+  .slider-label { font-size: 12px; color: var(--text-mid); }
+  .slider-label .pollutant-mark { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px;
+    background: var(--bg-elev); border-radius: 2px;
+    outline: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px;
+    background: var(--accent); border-radius: 50%;
+    cursor: pointer; transition: transform 0.1s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+  input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    background: var(--accent); border: none; border-radius: 50%;
+    cursor: pointer;
+  }
+  .slider-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; text-align: right;
+    color: var(--text);
+    background: var(--bg-elev);
+    padding: 4px 8px; border-radius: 6px;
+    border: 1px solid var(--line);
+  }
+
+  /* Scenarios */
+  .scenarios { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 14px; }
+  .scenario {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: left;
+    color: var(--text);
+    font-family: inherit;
+  }
+  .scenario:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .scenario.active { border-color: var(--accent); background: rgba(163,230,53,0.08); }
+  .scenario-name { font-weight: 600; font-size: 12px; margin-bottom: 3px; display: flex; align-items: center; gap: 6px; }
+  .scenario-desc { font-size: 10px; color: var(--text-dim); line-height: 1.4; }
+
+  /* Buttons */
+  .actions { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; padding: 14px; border-top: 1px solid var(--line); }
+  button.btn {
+    background: var(--accent);
+    color: #0a0e0d;
+    border: none;
+    padding: 11px 14px;
+    border-radius: 9px;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-family: inherit;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  button.btn:hover { background: #b6f54a; box-shadow: 0 0 20px var(--accent-glow); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.btn-secondary {
+    background: var(--bg-elev); color: var(--text); border: 1px solid var(--line);
+  }
+  button.btn.btn-secondary:hover { background: var(--bg-hover); box-shadow: none; }
+  button.btn.btn-danger { background: var(--danger); color: #fff; }
+  button.btn.btn-danger:hover { background: #f56565; box-shadow: 0 0 20px rgba(239,68,68,0.4); }
+
+  /* Event log */
+  #log-panel .panel-body { padding: 0; }
+  .log-list {
+    max-height: 180px;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .log-list::-webkit-scrollbar { width: 6px; }
+  .log-list::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  .log-row {
+    padding: 6px 18px;
+    display: grid;
+    grid-template-columns: 60px 70px 1fr;
+    gap: 10px;
+    border-bottom: 1px dashed var(--line);
+    color: var(--text-mid);
+  }
+  .log-time { color: var(--text-dim); }
+  .log-tag {
+    font-size: 9px; font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    align-self: center;
+  }
+  .log-tag.info { color: var(--info); }
+  .log-tag.warn { color: var(--warn); }
+  .log-tag.fault { color: var(--danger); }
+  .log-tag.who { color: var(--accent); }
+
+  /* Footer band */
+  footer {
+    padding: 14px 28px;
+    border-top: 1px solid var(--line);
+    color: var(--text-dim);
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  footer .credit { font-family: 'JetBrains Mono', monospace; }
+  footer a { color: var(--accent); text-decoration: none; }
+
+  /* Compliance status row */
+  .compliance-row {
+    padding: 10px 18px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--line);
+    display: flex; gap: 16px; flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; letter-spacing: 0.05em;
+  }
+  .compliance-item { display: flex; align-items: center; gap: 6px; }
+  .compliance-state { color: var(--accent); font-weight: 700; }
+  .compliance-state.over { color: var(--danger); }
+  .compliance-target { color: var(--text-dim); }
+
+  .speed-pill {
+    display: flex; gap: 2px;
+    background: var(--bg-elev); padding: 2px;
+    border-radius: 6px; border: 1px solid var(--line);
+  }
+  .speed-pill button {
+    background: transparent; border: none; color: var(--text-mid);
+    padding: 4px 8px; font-size: 10px; border-radius: 4px;
+    cursor: pointer; font-family: 'JetBrains Mono', monospace;
+  }
+  .speed-pill button.active { background: var(--accent); color: #0a0e0d; font-weight: 700; }
+
+  /* Stable terminal-state banner */
+  #stable-banner {
+    position: absolute;
+    bottom: 60px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: linear-gradient(135deg, rgba(163,230,53,0.95), rgba(132,204,22,0.95));
+    color: #0a0e0d;
+    border-radius: 12px;
+    padding: 14px 22px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 12px 40px rgba(163,230,53,0.35), 0 0 0 1px rgba(255,255,255,0.2) inset;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+    z-index: 10;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  #stable-banner.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .sb-glyph {
+    width: 32px; height: 32px;
+    background: #0a0e0d; color: var(--accent);
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 18px; font-weight: 800;
+  }
+  .sb-title { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; }
+  .sb-sub { font-size: 10px; opacity: 0.75; margin-top: 2px; font-family: 'Manrope', sans-serif; letter-spacing: 0; }
+
+  button.btn.btn-stable {
+    background: linear-gradient(135deg, #a3e635, #84cc16);
+    box-shadow: 0 0 24px var(--accent-glow), 0 0 0 2px rgba(255,255,255,0.15) inset;
+  }
+
+  /* Slider disabled state during sim — visually quieter, still readable */
+  input[type=range]:disabled::-webkit-slider-thumb { background: var(--accent-d); }
+  input[type=range]:disabled { opacity: 0.85; }
+
+  /* helpful tooltip-ish hint */
+  .hint {
+    position: absolute; bottom: 14px; left: 14px;
+    background: rgba(19,24,22,0.82);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 10px;
+    color: var(--text-dim);
+    backdrop-filter: blur(8px);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">D</div>
+    <div>
+      <div class="brand-title">DIAPS Control Center</div>
+      <div class="brand-sub">Distributed IoT Air Purification System · Public Toilet 12 m³</div>
+    </div>
+  </div>
+  <div class="live-readings">
+    <div class="reading">
+      <div class="reading-label"><span class="reading-dot" id="dot-pm"></span>PM2.5</div>
+      <div class="reading-value mono"><span id="r-pm">65.0</span><span class="reading-unit">µg/m³</span></div>
+    </div>
+    <div class="reading">
+      <div class="reading-label"><span class="reading-dot" id="dot-mb"></span>Microbes</div>
+      <div class="reading-value mono"><span id="r-mb">750</span><span class="reading-unit">CFU/m³</span></div>
+    </div>
+    <div class="reading">
+      <div class="reading-label"><span class="reading-dot" id="dot-gas"></span>SO₂ / VOC</div>
+      <div class="reading-value mono"><span id="r-gas">0.50</span><span class="reading-unit">ppm</span></div>
+    </div>
+    <div class="reading">
+      <div class="reading-label"><span class="reading-dot" id="dot-hum"></span>Humidity</div>
+      <div class="reading-value mono"><span id="r-hum">85</span><span class="reading-unit">%</span></div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ───────── LEFT: 3D + CHART ───────── -->
+  <section class="stage">
+    <div class="panel" id="stage3d">
+      <canvas id="threecanvas"></canvas>
+
+      <div class="stage-overlay">
+        <div class="overlay-chip">SCENE · Public Toilet · 12.0 m³</div>
+        <div class="overlay-chip" id="overlay-time">t = 00:00 · idle</div>
+        <div class="overlay-chip" id="overlay-mesh">ESP-NOW mesh: 4 nodes · 0.4ms latency</div>
+      </div>
+
+      <div class="stage-legend">
+        <div class="legend-row"><span class="legend-dot" style="background:var(--pm)"></span>PM2.5 particle</div>
+        <div class="legend-row"><span class="legend-dot" style="background:var(--mb)"></span>Microbe aerosol</div>
+        <div class="legend-row"><span class="legend-dot" style="background:var(--gas)"></span>Gas / SO₂</div>
+        <div class="legend-row"><span class="legend-dot" style="background:var(--accent)"></span>Active node</div>
+      </div>
+
+      <div class="hint">Drag to rotate · scroll to zoom · click a module to toggle fault</div>
+
+      <div class="stage-controls">
+        <button data-view="iso" class="active">ISO</button>
+        <button data-view="top">TOP</button>
+        <button data-view="front">FRONT</button>
+        <button data-view="cut">CUT-AWAY</button>
+      </div>
+    </div>
+
+    <div class="panel" id="chart-panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Pollutant Decay vs WHO Threshold</div>
+          <div class="panel-tag">first-order CADR model · V = 12 m³</div>
+        </div>
+        <div class="speed-pill" id="speed-pill">
+          <button data-speed="1">1×</button>
+          <button data-speed="4" class="active">4×</button>
+          <button data-speed="16">16×</button>
+          <button data-speed="60">60×</button>
+        </div>
+      </div>
+      <div class="compliance-row" id="compliance-row">
+        <!-- filled in JS -->
+      </div>
+      <div class="chart-legend">
+        <div class="chart-legend-item"><span class="chart-legend-line" style="background:var(--pm)"></span>PM2.5 (norm.)</div>
+        <div class="chart-legend-item"><span class="chart-legend-line" style="background:var(--mb)"></span>Microbes (norm.)</div>
+        <div class="chart-legend-item"><span class="chart-legend-line" style="background:var(--gas)"></span>Gas (norm.)</div>
+        <div class="chart-legend-item"><span class="chart-legend-line" style="background:var(--hum)"></span>Humidity (norm.)</div>
+        <div class="chart-legend-item"><span class="chart-legend-line" style="background:var(--who-line); border-top: 2px dashed var(--who-line); height: 0;"></span>WHO target</div>
+      </div>
+      <svg id="chart-svg" viewBox="0 0 800 220" preserveAspectRatio="none"></svg>
+    </div>
+  </section>
+
+  <!-- ───────── RIGHT: CONTROLS ───────── -->
+  <section class="control-stack">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Distributed Nodes · Mesh Status</div>
+          <div class="panel-tag">click any node to simulate fault — system continues</div>
+        </div>
+        <div class="panel-tag" id="mesh-health">HEALTH 100%</div>
+      </div>
+      <div class="modules" id="modules">
+        <!-- filled in JS -->
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Initial Conditions</div>
+          <div class="panel-tag">set baseline pollutant levels</div>
+        </div>
+      </div>
+      <div class="sliders" id="sliders">
+        <div class="slider-row">
+          <div class="slider-label"><span class="pollutant-mark" style="background:var(--pm)"></span>PM2.5</div>
+          <input type="range" id="s-pm" min="5" max="250" value="65" step="1" />
+          <div class="slider-value mono"><span id="v-pm">65</span> µg</div>
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span class="pollutant-mark" style="background:var(--mb)"></span>Microbes</div>
+          <input type="range" id="s-mb" min="100" max="3000" value="750" step="10" />
+          <div class="slider-value mono"><span id="v-mb">750</span> CFU</div>
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span class="pollutant-mark" style="background:var(--gas)"></span>SO₂ / VOC</div>
+          <input type="range" id="s-gas" min="0" max="3" value="0.5" step="0.05" />
+          <div class="slider-value mono"><span id="v-gas">0.50</span> ppm</div>
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span class="pollutant-mark" style="background:var(--hum)"></span>Humidity</div>
+          <input type="range" id="s-hum" min="30" max="100" value="85" step="1" />
+          <div class="slider-value mono"><span id="v-hum">85</span> %</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btn-trigger">▶ Trigger DIAPS</button>
+        <button class="btn btn-secondary" id="btn-reset">Reset</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Test-Case Scenarios</div>
+          <div class="panel-tag">preset realistic conditions</div>
+        </div>
+      </div>
+      <div class="scenarios" id="scenarios">
+        <!-- filled in JS -->
+      </div>
+    </div>
+
+    <div class="panel" id="log-panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Orchestrator Event Log</div>
+          <div class="panel-tag">live decisions from the IoT controller</div>
+        </div>
+      </div>
+      <div class="log-list" id="log-list">
+        <div class="log-row"><span class="log-time">00:00</span><span class="log-tag info">SYS</span><span>DIAPS booted · 4 nodes online · ESP-NOW mesh formed</span></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span class="credit">DIAPS · v0.4 simulator · physics-based first-order CADR model</span>
+  <span>Targets: WHO IAQ 2010 / 2021 — PM2.5 ≤ 15 µg/m³ · Microbes ≤ 500 CFU/m³ · SO₂ ≤ 0.04 ppm · RH 40–60%</span>
+</footer>
+
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+/* =====================================================================
+   DIAPS SIMULATOR — JS engine
+   --------------------------------------------------------------------
+   Modules (per Chapter One):
+     - Air Inlet (passive, always on)
+     - HEPA / Microbial Node          → removes PM2.5 + microbes
+     - Gaseous (Activated Carbon) Node → removes SO2 / VOC
+     - Fragrance Node (Lemongrass)    → small antimicrobial contribution
+     - Orchestrator (ESP32, ESP-NOW)  → coordinates, no purification
+     - Air Outlet (passive)
+   Decay model:
+     dC/dt = -(CADR_total/V)*C + Source_rate
+   ===================================================================== */
+
+const V = 12;    // m³ — toilet volume
+
+// per-module Clean Air Delivery Rate per pollutant (m³/min)
+const NODES = {
+  hepa:      { name: 'HEPA Node',          icon: 'H', spec: '0.3µm @ 99.97%', cadr: { pm: 1.6, mb: 1.4, gas: 0.0, hum: 0.0 }, color: 0x60a5fa },
+  gaseous:   { name: 'Gaseous Node',       icon: 'G', spec: 'Coconut activated carbon', cadr: { pm: 0.1, mb: 0.0, gas: 1.2, hum: 0.0 }, color: 0xfb923c },
+  fragrance: { name: 'Fragrance Node',     icon: 'F', spec: 'Lemongrass essential oil', cadr: { pm: 0.0, mb: 0.4, gas: 0.0, hum: 0.0 }, color: 0xa3e635 },
+  orchestrator: { name: 'Orchestrator',    icon: 'O', spec: 'ESP32 · ESP-NOW mesh', cadr: { pm: 0.0, mb: 0.0, gas: 0.0, hum: 0.0 }, color: 0xc084fc },
+};
+// passive ventilation acts on humidity & all pollutants weakly
+const VENT_BASE = 0.05; // m³/min equivalent
+
+// WHO / international IAQ targets
+const TARGETS = {
+  pm:  { label: 'PM2.5',    unit: 'µg/m³', target: 15,    initialMax: 250, color: 'var(--pm)' },
+  mb:  { label: 'Microbes', unit: 'CFU/m³',target: 500,   initialMax: 3000, color: 'var(--mb)' },
+  gas: { label: 'SO₂/VOC',  unit: 'ppm',   target: 0.04,  initialMax: 3,   color: 'var(--gas)' },
+  hum: { label: 'Humidity', unit: '%',     target: 60,    initialMax: 100, color: 'var(--hum)' },
+};
+
+// ─── State ─────────────────────────────────────────────────────
+const state = {
+  running: false,
+  stable: false,         // true once all metrics cross WHO compliance
+  t: 0,                  // simulated minutes
+  speed: 4,              // sim minutes per real-time second
+  C: { pm: 65, mb: 750, gas: 0.50, hum: 85 },
+  C0:{ pm: 65, mb: 750, gas: 0.50, hum: 85 },
+  faults: { hepa: false, gaseous: false, fragrance: false, orchestrator: false },
+  history: [],          // [{t, pm, mb, gas, hum}]
+  scenario: 'baseline',
+};
+
+// ─── Scenarios ────────────────────────────────────────────────
+const SCENARIOS = {
+  baseline:   { name: 'Baseline · idle', desc: 'Empty toilet, light residual pollution from previous occupants.', init: { pm: 35, mb: 350, gas: 0.15, hum: 70 }, faults: [] },
+  peakhour:   { name: 'Peak hour', desc: 'Crowded public toilet, high traffic, heavy odour, many spores.', init: { pm: 90, mb: 1400, gas: 1.1, hum: 88 }, faults: [] },
+  plume:      { name: 'Toilet plume event', desc: 'Sudden flush aerosolises microbes (Barker & Jones, 2005).', init: { pm: 70, mb: 2400, gas: 0.7, hum: 92 }, faults: [] },
+  fault:      { name: 'HEPA node fails', desc: 'Demonstrates fault tolerance — gaseous + fragrance keep working.', init: { pm: 75, mb: 1100, gas: 0.6, hum: 85 }, faults: ['hepa'] },
+  brownout:   { name: 'Erratic power', desc: 'Nigerian context — orchestrator briefly degrades; nodes operate independently.', init: { pm: 110, mb: 1600, gas: 1.3, hum: 90 }, faults: ['orchestrator'] },
+  worstcase:  { name: 'Worst case', desc: 'All pollutants high. Stress test of the full distributed stack.', init: { pm: 230, mb: 2800, gas: 2.6, hum: 96 }, faults: [] },
+};
+
+// ─── DOM ───────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const moduleHost = $('modules');
+const scenarioHost = $('scenarios');
+const logList = $('log-list');
+const complianceRow = $('compliance-row');
+
+// Build modules
+function renderModules() {
+  moduleHost.innerHTML = '';
+  for (const key of Object.keys(NODES)) {
+    const n = NODES[key];
+    const fault = state.faults[key];
+    const div = document.createElement('div');
+    div.className = 'module' + (fault ? ' fault' : (state.running ? ' active' : ''));
+    div.dataset.key = key;
+    div.innerHTML = `
+      <div class="module-header">
+        <div class="module-icon">${n.icon}</div>
+        <div>
+          <div class="module-name">${n.name}</div>
+          <div class="module-spec">${n.spec}</div>
+        </div>
+      </div>
+      <div class="module-status">
+        <span class="pulse"></span>
+        ${fault ? 'FAULT — bypassed by mesh' : (state.running ? 'ACTIVE · purifying' : 'IDLE · standby')}
+      </div>
+    `;
+    div.onclick = () => {
+      state.faults[key] = !state.faults[key];
+      log(state.faults[key] ? 'FAULT' : 'INFO', `${n.name} ${state.faults[key] ? 'manually faulted — mesh continues' : 'restored'}`);
+      renderModules();
+      updateMeshHealth();
+      update3DModuleStates();
+    };
+    moduleHost.appendChild(div);
+  }
+}
+
+// Build scenarios
+function renderScenarios() {
+  scenarioHost.innerHTML = '';
+  for (const key of Object.keys(SCENARIOS)) {
+    const s = SCENARIOS[key];
+    const btn = document.createElement('button');
+    btn.className = 'scenario' + (state.scenario === key ? ' active' : '');
+    btn.dataset.key = key;
+    btn.innerHTML = `
+      <div class="scenario-name">${s.name}</div>
+      <div class="scenario-desc">${s.desc}</div>
+    `;
+    btn.onclick = () => loadScenario(key);
+    scenarioHost.appendChild(btn);
+  }
+}
+
+function loadScenario(key) {
+  state.scenario = key;
+  const s = SCENARIOS[key];
+  state.C = { ...s.init };
+  state.C0 = { ...s.init };
+  state.faults = { hepa: false, gaseous: false, fragrance: false, orchestrator: false };
+  for (const f of s.faults) state.faults[f] = true;
+  state.t = 0;
+  state.history = [];
+  state.running = false;
+  state.stable = false;
+  if (typeof resetCompliance === 'function') resetCompliance();
+  // sync sliders
+  $('s-pm').value = s.init.pm;
+  $('s-mb').value = s.init.mb;
+  $('s-gas').value = s.init.gas;
+  $('s-hum').value = s.init.hum;
+  syncSliderLabels();
+  setSlidersInteractive(true);
+  hideStableBanner();
+  $('btn-trigger').textContent = '▶ Trigger DIAPS';
+  $('btn-trigger').classList.remove('btn-stable');
+  renderModules();
+  renderScenarios();
+  updateReadings();
+  updateMeshHealth();
+  drawChart();
+  update3DModuleStates();
+  log('INFO', `Scenario loaded: ${s.name}`);
+}
+
+// Sliders
+function syncSliderLabels() {
+  $('v-pm').textContent  = (+$('s-pm').value).toFixed(0);
+  $('v-mb').textContent  = (+$('s-mb').value).toFixed(0);
+  $('v-gas').textContent = (+$('s-gas').value).toFixed(2);
+  $('v-hum').textContent = (+$('s-hum').value).toFixed(0);
+}
+['s-pm','s-mb','s-gas','s-hum'].forEach((id) => {
+  $(id).addEventListener('input', () => {
+    state.C0.pm  = +$('s-pm').value;
+    state.C0.mb  = +$('s-mb').value;
+    state.C0.gas = +$('s-gas').value;
+    state.C0.hum = +$('s-hum').value;
+    if (!state.running) {
+      state.C = { ...state.C0 };
+      state.t = 0; state.history = [];
+      updateReadings(); drawChart();
+    }
+    syncSliderLabels();
+  });
+});
+
+// Buttons
+$('btn-trigger').onclick = () => {
+  // If we're already stable, this button is "Reset" effectively
+  if (state.stable) { $('btn-reset').onclick(); return; }
+  if (state.running) {
+    state.running = false;
+    $('btn-trigger').textContent = '▶ Resume';
+    log('INFO', 'Simulation paused');
+    return;
+  }
+  if (state.t === 0) {
+    state.C = { ...state.C0 };
+    state.history = [];
+    resetCompliance();
+    log('WHO', `Trigger received — orchestrator dispatching to ${4 - Object.values(state.faults).filter(Boolean).length}/4 nodes`);
+  }
+  state.running = true;
+  $('btn-trigger').textContent = '❚❚ Pause';
+  setSlidersInteractive(false);
+  hideStableBanner();
+  renderModules();
+  update3DModuleStates();
+};
+$('btn-reset').onclick = () => {
+  state.running = false;
+  state.stable = false;
+  state.t = 0;
+  state.C = { ...state.C0 };
+  state.history = [];
+  resetCompliance();
+  $('btn-trigger').textContent = '▶ Trigger DIAPS';
+  $('btn-trigger').classList.remove('btn-stable');
+  setSlidersInteractive(true);
+  hideStableBanner();
+  // restore slider thumbs to C0
+  $('s-pm').value  = state.C0.pm;
+  $('s-mb').value  = state.C0.mb;
+  $('s-gas').value = state.C0.gas;
+  $('s-hum').value = state.C0.hum;
+  syncSliderLabels();
+  updateReadings(); drawChart(); renderModules(); update3DModuleStates();
+  log('INFO', 'Reset to initial conditions');
+};
+
+// Speed
+document.querySelectorAll('#speed-pill button').forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll('#speed-pill button').forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+    state.speed = +b.dataset.speed;
+  };
+});
+
+// ─── Simulation loop ──────────────────────────────────────────
+let lastReal = performance.now();
+function tick(nowMs) {
+  const dtReal = (nowMs - lastReal) / 1000;  // seconds
+  lastReal = nowMs;
+  if (state.running) {
+    const dtSim = dtReal * state.speed;       // sim minutes
+    state.t += dtSim;
+    // compute total CADR per pollutant from non-faulty nodes
+    const totalCADR = { pm: 0, mb: 0, gas: 0, hum: 0 };
+    for (const key of Object.keys(NODES)) {
+      if (state.faults[key]) continue;
+      const c = NODES[key].cadr;
+      totalCADR.pm += c.pm;  totalCADR.mb += c.mb;
+      totalCADR.gas += c.gas; totalCADR.hum += c.hum;
+    }
+    // first-order decay + passive vent — but clamp to WHO target as the floor
+    // (rationale: once compliant, the orchestrator throttles down; we don't
+    //  push concentrations to physical zero, we hold them at safe level)
+    for (const k of ['pm','mb','gas']) {
+      const k_decay = (totalCADR[k] + VENT_BASE) / V;
+      const next = state.C[k] * Math.exp(-k_decay * dtSim);
+      // soft floor at WHO target so end state is visibly "at target"
+      state.C[k] = Math.max(next, TARGETS[k].target * 0.92);
+    }
+    // humidity: drifts toward 55% with passive vent
+    const humDrift = 0.04 * dtSim;
+    state.C.hum = state.C.hum + (55 - state.C.hum) * (1 - Math.exp(-humDrift));
+
+    // ── live "controls returning to spec" — slider thumbs animate ──
+    syncSlidersToState();
+
+    // record history every ~0.2 sim minutes
+    if (state.history.length === 0 || state.t - state.history[state.history.length-1].t >= 0.2) {
+      state.history.push({ t: state.t, ...state.C });
+    }
+    // log WHO compliance crossings
+    checkComplianceCrossings();
+    // detect terminal stable state
+    detectStable();
+    if (state.history.length > 1500) state.history.shift();
+    if (state.t > 240) state.running = false; // cap at 4 sim hours
+    updateReadings();
+    drawChart();
+    update3DPollutants();
+  }
+  const stateLabel = state.stable ? 'stable · WHO compliant' :
+                     state.running ? 'running' :
+                     (state.t === 0 ? 'idle' : 'paused');
+  $('overlay-time').textContent = `t = ${formatTime(state.t)} · ${stateLabel}`;
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame((t) => { lastReal = t; tick(t); });
+
+// Sync slider thumbs to current concentrations during sim.
+// This is the visible "controls transitioning back to WHO standards" the user sees.
+function syncSlidersToState() {
+  $('s-pm').value  = state.C.pm;
+  $('s-mb').value  = state.C.mb;
+  $('s-gas').value = state.C.gas;
+  $('s-hum').value = state.C.hum;
+  syncSliderLabels();
+}
+
+let _hit = { pm: false, mb: false, gas: false, hum: false };
+function resetCompliance() { _hit = { pm: false, mb: false, gas: false, hum: false }; }
+function checkComplianceCrossings() {
+  for (const k of ['pm','mb','gas']) {
+    if (!_hit[k] && state.C[k] <= TARGETS[k].target) {
+      _hit[k] = true;
+      log('WHO', `${TARGETS[k].label} reached WHO target (${TARGETS[k].target} ${TARGETS[k].unit}) at t=${formatTime(state.t)}`);
+    }
+  }
+  if (!_hit.hum && Math.abs(state.C.hum - 55) < 5) {
+    _hit.hum = true;
+    log('WHO', `Humidity stabilised in safe band (40–60%) at t=${formatTime(state.t)}`);
+  }
+}
+
+function formatTime(min) {
+  const m = Math.floor(min); const s = Math.floor((min - m) * 60);
+  return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+}
+
+// ─── Stable terminal state ───────────────────────────────────
+// Once all four metrics are within WHO compliance, the system has reached
+// its end state. We auto-pause and surface a clear visual confirmation.
+function detectStable() {
+  if (state.stable) return;
+  const ok =
+    state.C.pm  <= TARGETS.pm.target  * 1.001 &&
+    state.C.mb  <= TARGETS.mb.target  * 1.001 &&
+    state.C.gas <= TARGETS.gas.target * 1.001 &&
+    state.C.hum >= 40 && state.C.hum <= 60;
+  if (!ok) return;
+  state.stable = true;
+  state.running = false;
+  $('btn-trigger').textContent = '✓ STABLE';
+  $('btn-trigger').classList.add('btn-stable');
+  log('WHO', `★ ALL METRICS WHO-COMPLIANT — system stable at t=${formatTime(state.t)}. Orchestrator throttling nodes to maintenance mode.`);
+  showStableBanner();
+}
+
+function showStableBanner() {
+  let b = document.getElementById('stable-banner');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'stable-banner';
+    b.innerHTML = `
+      <div class="sb-glyph">✓</div>
+      <div>
+        <div class="sb-title">SYSTEM STABLE · WHO COMPLIANT</div>
+        <div class="sb-sub">All 4 metrics within target. Reset to run another scenario.</div>
+      </div>`;
+    document.getElementById('stage3d').appendChild(b);
+  }
+  b.classList.add('show');
+}
+function hideStableBanner() {
+  const b = document.getElementById('stable-banner');
+  if (b) b.classList.remove('show');
+}
+
+function setSlidersInteractive(canEdit) {
+  ['s-pm','s-mb','s-gas','s-hum'].forEach((id) => {
+    $(id).disabled = !canEdit;
+    $(id).style.opacity = canEdit ? '1' : '0.7';
+    $(id).style.cursor = canEdit ? 'pointer' : 'not-allowed';
+  });
+}
+
+// ─── Updates ──────────────────────────────────────────────────
+function updateReadings() {
+  $('r-pm').textContent  = state.C.pm.toFixed(1);
+  $('r-mb').textContent  = state.C.mb.toFixed(0);
+  $('r-gas').textContent = state.C.gas.toFixed(2);
+  $('r-hum').textContent = state.C.hum.toFixed(0);
+  // dot states
+  setDot('dot-pm',  state.C.pm,  TARGETS.pm.target);
+  setDot('dot-mb',  state.C.mb,  TARGETS.mb.target);
+  setDot('dot-gas', state.C.gas, TARGETS.gas.target);
+  setDot('dot-hum', state.C.hum, 60, 40, 80);
+  renderCompliance();
+}
+function setDot(id, val, target, lo, hi) {
+  const el = $(id); el.classList.remove('warn','danger');
+  if (lo !== undefined) {
+    if (val < lo || val > hi) el.classList.add('danger');
+    else if (val > target) el.classList.add('warn');
+  } else {
+    if (val > target * 2) el.classList.add('danger');
+    else if (val > target) el.classList.add('warn');
+  }
+}
+
+function renderCompliance() {
+  const row = (k, v, label, unit, target, ok) => `
+    <div class="compliance-item">
+      <span class="compliance-target">${label}</span>
+      <span class="compliance-state ${ok ? '' : 'over'}">${v} ${unit}</span>
+      <span class="compliance-target">/ ${target}</span>
+    </div>`;
+  complianceRow.innerHTML =
+    row('pm',  state.C.pm.toFixed(1),  'PM2.5',  'µg', TARGETS.pm.target,  state.C.pm  <= TARGETS.pm.target) +
+    row('mb',  state.C.mb.toFixed(0),  'MICROBES','CFU', TARGETS.mb.target, state.C.mb  <= TARGETS.mb.target) +
+    row('gas', state.C.gas.toFixed(2), 'SO₂',    'ppm', TARGETS.gas.target, state.C.gas <= TARGETS.gas.target) +
+    row('hum', state.C.hum.toFixed(0), 'HUMIDITY','%',  '40–60', state.C.hum >= 40 && state.C.hum <= 60);
+}
+
+function updateMeshHealth() {
+  const total = Object.keys(NODES).length;
+  const faulty = Object.values(state.faults).filter(Boolean).length;
+  const pct = Math.round(((total - faulty) / total) * 100);
+  $('mesh-health').textContent = `HEALTH ${pct}%`;
+  $('mesh-health').style.color = pct >= 75 ? 'var(--accent)' : pct >= 50 ? 'var(--warn)' : 'var(--danger)';
+  $('overlay-mesh').textContent = `ESP-NOW mesh: ${total - faulty}/${total} nodes · ${faulty ? 'graceful degradation' : '0.4ms latency'}`;
+}
+
+// ─── Chart ───────────────────────────────────────────────────
+function drawChart() {
+  const svg = $('chart-svg');
+  const W = 800, H = 220, P = { l: 36, r: 12, t: 14, b: 24 };
+  const innerW = W - P.l - P.r, innerH = H - P.t - P.b;
+  // x range: 0 .. max(2, t+5)
+  const tMax = Math.max(2, state.t * 1.05);
+  const xs = (t) => P.l + (t / tMax) * innerW;
+  // normalize all pollutants to 0..1 vs initial
+  const norm = (k, v) => Math.min(1.05, v / Math.max(state.C0[k] || 1, TARGETS[k].target));
+  const ys = (n) => P.t + innerH - n * innerH;
+
+  // grid
+  let g = '';
+  for (let i = 0; i <= 4; i++) {
+    const y = P.t + (i / 4) * innerH;
+    g += `<line x1="${P.l}" y1="${y}" x2="${P.l+innerW}" y2="${y}" stroke="#1a201d" stroke-width="1" />`;
+  }
+  // WHO target lines (we plot normalized targets per pollutant)
+  const targetLines = ['pm','mb','gas'].map((k) => {
+    const y = ys(TARGETS[k].target / Math.max(state.C0[k] || TARGETS[k].target, TARGETS[k].target));
+    return `<line x1="${P.l}" y1="${y}" x2="${P.l+innerW}" y2="${y}" stroke="${getCSS('--who-line')}" stroke-width="1" stroke-dasharray="3,4" opacity="0.55"/>`;
+  }).join('');
+  // path builders
+  const series = (k) => {
+    if (state.history.length < 2) return '';
+    const pts = state.history.map((h) => `${xs(h.t).toFixed(1)},${ys(norm(k, h[k])).toFixed(1)}`).join(' L ');
+    return `<path d="M ${pts}" fill="none" stroke="${getCSS('--' + k)}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  };
+  // axis labels
+  const xticks = [];
+  for (let i = 0; i <= 4; i++) {
+    const t = (tMax * i) / 4;
+    xticks.push(`<text x="${xs(t)}" y="${H - 6}" fill="#6b716d" font-size="10" text-anchor="middle" font-family="JetBrains Mono">${formatTime(t)}</text>`);
+  }
+  // current values markers
+  const markers = ['pm','mb','gas','hum'].map((k) => {
+    if (state.history.length === 0) return '';
+    const last = state.history[state.history.length - 1];
+    const cx = xs(last.t), cy = ys(norm(k, last[k]));
+    return `<circle cx="${cx}" cy="${cy}" r="3" fill="${getCSS('--' + k)}"/>`;
+  }).join('');
+
+  svg.innerHTML = `
+    ${g}
+    ${targetLines}
+    ${series('pm')}
+    ${series('mb')}
+    ${series('gas')}
+    ${series('hum')}
+    ${markers}
+    ${xticks.join('')}
+    <text x="${P.l - 6}" y="${P.t + 4}" fill="#6b716d" font-size="9" text-anchor="end" font-family="JetBrains Mono">100%</text>
+    <text x="${P.l - 6}" y="${P.t + innerH}" fill="#6b716d" font-size="9" text-anchor="end" font-family="JetBrains Mono">0%</text>
+  `;
+}
+function getCSS(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+// ─── Logging ──────────────────────────────────────────────────
+function log(tag, msg) {
+  const row = document.createElement('div');
+  row.className = 'log-row';
+  row.innerHTML = `<span class="log-time">${formatTime(state.t)}</span><span class="log-tag ${tag.toLowerCase()}">${tag}</span><span>${msg}</span>`;
+  logList.prepend(row);
+  while (logList.children.length > 60) logList.removeChild(logList.lastChild);
+}
+
+/* ============================================================
+   3D SCENE — Three.js
+   Public toilet 12 m³ (≈ 2.0 × 2.0 × 3.0 m) with DIAPS modules
+   ============================================================ */
+let scene, camera, renderer, controls, raycaster, mouse;
+let modulesMesh = {}; // {hepa, gaseous, fragrance, orchestrator}
+let particleSystems = { pm: null, mb: null, gas: null };
+let meshLines = [];
+let isDragging = false, dragStart = null;
+let camYaw = Math.PI * 0.25, camPitch = Math.PI * 0.25, camDist = 7.5;
+let camTarget = new THREE.Vector3(0, 1.0, 0);
+
+function init3D() {
+  const canvas = $('threecanvas');
+  const stage = $('stage3d');
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+  renderer.shadowMap.enabled = true;
+
+  scene = new THREE.Scene();
+  scene.background = null;
+  scene.fog = new THREE.Fog(0x0a0e0d, 8, 18);
+
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+
+  // lights
+  const amb = new THREE.AmbientLight(0xffffff, 0.35);
+  scene.add(amb);
+  const key = new THREE.DirectionalLight(0xa3e635, 0.7);
+  key.position.set(3, 5, 4);
+  scene.add(key);
+  const fill = new THREE.DirectionalLight(0x60a5fa, 0.4);
+  fill.position.set(-4, 3, -2);
+  scene.add(fill);
+  const top = new THREE.PointLight(0xa3e635, 1.5, 6);
+  top.position.set(0, 2.6, 0);
+  scene.add(top);
+
+  // ── room (toilet stall: 2 × 2 × 3) ────────────────────────
+  const W = 2, D = 2, H = 3;
+  const roomMat = new THREE.MeshStandardMaterial({
+    color: 0x1f2624, roughness: 0.85, metalness: 0.05, side: THREE.BackSide
+  });
+  const room = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), roomMat);
+  room.position.y = H / 2;
+  scene.add(room);
+
+  // floor tile pattern
+  const floorGeo = new THREE.PlaneGeometry(W, D, 8, 8);
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x141a18, roughness: 0.95 });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = 0.001;
+  scene.add(floor);
+
+  // grid lines on floor
+  const grid = new THREE.GridHelper(2, 8, 0x2a312d, 0x2a312d);
+  grid.position.y = 0.002;
+  scene.add(grid);
+
+  // ── toilet (WC) ───────────────────────────────────────────
+  const wc = new THREE.Group();
+  // base
+  const baseMat = new THREE.MeshStandardMaterial({ color: 0xe7eae6, roughness: 0.4, metalness: 0.05 });
+  const wcBase = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.55), baseMat);
+  wcBase.position.set(0, 0.2, 0);
+  wc.add(wcBase);
+  // bowl
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.18, 0.18, 24), baseMat);
+  bowl.position.set(0, 0.49, 0.05);
+  wc.add(bowl);
+  // bowl interior (darker)
+  const bowlIn = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.14, 0.06, 24), new THREE.MeshStandardMaterial({ color: 0x6b716d, roughness: 0.9 }));
+  bowlIn.position.set(0, 0.55, 0.05);
+  wc.add(bowlIn);
+  // tank
+  const tank = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.18), baseMat);
+  tank.position.set(0, 0.65, -0.22);
+  wc.add(tank);
+  // seat ring
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.025, 8, 24), baseMat);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(0, 0.59, 0.05);
+  wc.add(ring);
+  wc.position.set(-0.5, 0, -0.4);
+  scene.add(wc);
+
+  // small sink/vanity opposite wall
+  const sinkMat = new THREE.MeshStandardMaterial({ color: 0xc5cbc6, roughness: 0.4 });
+  const sink = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.3), sinkMat);
+  sink.position.set(0.6, 0.85, 0.7);
+  scene.add(sink);
+  const sinkLeg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.85, 0.06), sinkMat);
+  sinkLeg.position.set(0.6, 0.42, 0.7);
+  scene.add(sinkLeg);
+
+  // ── DIAPS modules ────────────────────────────────────────
+  // HEPA Node (cylindrical, ceiling-mounted, near WC)
+  modulesMesh.hepa = makeModule('hepa', NODES.hepa, new THREE.CylinderGeometry(0.18, 0.18, 0.3, 24), { x: -0.6, y: 2.45, z: 0.4 }, 0x60a5fa);
+  // Gaseous Node (rectangular activated carbon block, wall-mounted)
+  modulesMesh.gaseous = makeModule('gaseous', NODES.gaseous, new THREE.BoxGeometry(0.35, 0.25, 0.18), { x: 0.85, y: 2.0, z: -0.3 }, 0xfb923c);
+  // Fragrance Node (small unit, wall-mounted, with green leaf)
+  modulesMesh.fragrance = makeModule('fragrance', NODES.fragrance, new THREE.BoxGeometry(0.2, 0.22, 0.18), { x: -0.85, y: 1.6, z: 0.7 }, 0xa3e635);
+  // Orchestrator (central hub on ceiling)
+  modulesMesh.orchestrator = makeModule('orchestrator', NODES.orchestrator, new THREE.OctahedronGeometry(0.18, 0), { x: 0, y: 2.7, z: 0 }, 0xc084fc);
+
+  // mesh links between orchestrator and other modules
+  meshLines = [];
+  for (const k of ['hepa','gaseous','fragrance']) {
+    const line = makeMeshLink(modulesMesh.orchestrator.position, modulesMesh[k].position);
+    meshLines.push({ key: k, line });
+    scene.add(line);
+  }
+
+  // ── particle systems ─────────────────────────────────────
+  particleSystems.pm  = makeParticles(0x60a5fa, 350, 0.03);
+  particleSystems.mb  = makeParticles(0xc084fc, 220, 0.04);
+  particleSystems.gas = makeParticles(0xfb923c, 160, 0.035);
+  scene.add(particleSystems.pm, particleSystems.mb, particleSystems.gas);
+
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
+
+  // event listeners
+  setupCamControls();
+  resize3D();
+  window.addEventListener('resize', resize3D);
+  animate3D();
+}
+
+function makeModule(key, node, geo, pos, color) {
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x2a312d, emissive: color, emissiveIntensity: 0.4, roughness: 0.4, metalness: 0.7
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(pos.x, pos.y, pos.z);
+  mesh.userData.key = key;
+  mesh.userData.color = color;
+  scene.add(mesh);
+
+  // halo
+  const haloMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25 });
+  const haloGeo = geo.clone();
+  const halo = new THREE.Mesh(haloGeo, haloMat);
+  halo.scale.setScalar(1.4);
+  halo.position.copy(mesh.position);
+  scene.add(halo);
+  mesh.userData.halo = halo;
+
+  // text label sprite
+  const label = makeLabel(node.name);
+  label.position.set(pos.x, pos.y + 0.32, pos.z);
+  scene.add(label);
+  mesh.userData.label = label;
+
+  // mounting bracket (small box behind the module)
+  const bracket = new THREE.Mesh(
+    new THREE.BoxGeometry(0.05, 0.05, 0.05),
+    new THREE.MeshStandardMaterial({ color: 0x2a312d, roughness: 0.7 })
+  );
+  bracket.position.copy(mesh.position);
+  scene.add(bracket);
+
+  return mesh;
+}
+
+function makeLabel(text) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(19,24,22,0.92)';
+  ctx.fillRect(0,0,canvas.width, canvas.height);
+  ctx.strokeStyle = '#2a312d'; ctx.lineWidth = 2;
+  ctx.strokeRect(1,1,canvas.width-2,canvas.height-2);
+  ctx.fillStyle = '#a3e635';
+  ctx.font = 'bold 28px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text.toUpperCase(), canvas.width/2, canvas.height/2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+  sprite.scale.set(0.7, 0.18, 1);
+  return sprite;
+}
+
+function makeMeshLink(a, b) {
+  const points = [a.clone(), b.clone()];
+  const geom = new THREE.BufferGeometry().setFromPoints(points);
+  const mat = new THREE.LineDashedMaterial({ color: 0xa3e635, dashSize: 0.05, gapSize: 0.04, transparent: true, opacity: 0.5 });
+  const line = new THREE.Line(geom, mat);
+  line.computeLineDistances();
+  return line;
+}
+
+function makeParticles(color, count, size) {
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(count * 3);
+  const vel = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    pos[i*3+0] = (Math.random() - 0.5) * 1.8;
+    pos[i*3+1] = Math.random() * 2.6 + 0.2;
+    pos[i*3+2] = (Math.random() - 0.5) * 1.8;
+    vel[i*3+0] = (Math.random() - 0.5) * 0.005;
+    vel[i*3+1] = (Math.random() - 0.5) * 0.005;
+    vel[i*3+2] = (Math.random() - 0.5) * 0.005;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.userData.vel = vel;
+  geo.userData.count = count;
+  const mat = new THREE.PointsMaterial({ color, size, transparent: true, opacity: 0.85, sizeAttenuation: true });
+  return new THREE.Points(geo, mat);
+}
+
+function update3DPollutants() {
+  // each pollutant has a "visible fraction" = current / initial
+  const frac = {
+    pm:  Math.min(1, state.C.pm  / Math.max(state.C0.pm,  1)),
+    mb:  Math.min(1, state.C.mb  / Math.max(state.C0.mb,  1)),
+    gas: Math.min(1, state.C.gas / Math.max(state.C0.gas, 0.01)),
+  };
+  for (const k of ['pm','mb','gas']) {
+    const sys = particleSystems[k];
+    if (!sys) continue;
+    const total = sys.geometry.userData.count;
+    const visible = Math.round(total * frac[k]);
+    sys.geometry.setDrawRange(0, visible);
+    sys.material.opacity = 0.4 + 0.5 * frac[k];
+  }
+}
+
+function update3DModuleStates() {
+  for (const key of Object.keys(modulesMesh)) {
+    const m = modulesMesh[key];
+    const fault = state.faults[key];
+    if (fault) {
+      m.material.emissive.setHex(0xef4444);
+      m.material.emissiveIntensity = 0.15;
+      if (m.userData.halo) m.userData.halo.material.opacity = 0.05;
+    } else {
+      m.material.emissive.setHex(m.userData.color);
+      m.material.emissiveIntensity = state.running ? 0.7 : 0.3;
+      if (m.userData.halo) m.userData.halo.material.opacity = state.running ? 0.35 : 0.18;
+    }
+  }
+  for (const ml of meshLines) {
+    ml.line.material.opacity = state.faults[ml.key] ? 0.05 : (state.running ? 0.7 : 0.4);
+  }
+}
+
+function setupCamControls() {
+  const canvas = $('threecanvas');
+  canvas.addEventListener('mousedown', (e) => {
+    isDragging = true; dragStart = { x: e.clientX, y: e.clientY, yaw: camYaw, pitch: camPitch };
+  });
+  window.addEventListener('mouseup', () => { isDragging = false; });
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    camYaw   = dragStart.yaw   + (e.clientX - dragStart.x) * 0.008;
+    camPitch = dragStart.pitch + (e.clientY - dragStart.y) * 0.006;
+    camPitch = Math.max(0.05, Math.min(Math.PI / 2 - 0.05, camPitch));
+  });
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    camDist = Math.max(3.5, Math.min(14, camDist + e.deltaY * 0.005));
+  }, { passive: false });
+  // click to fault module
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(Object.values(modulesMesh));
+    if (hits.length) {
+      const key = hits[0].object.userData.key;
+      state.faults[key] = !state.faults[key];
+      log(state.faults[key] ? 'FAULT' : 'INFO', `${NODES[key].name} ${state.faults[key] ? 'manually faulted — mesh continues' : 'restored'}`);
+      renderModules();
+      updateMeshHealth();
+      update3DModuleStates();
+    }
+  });
+}
+
+// view presets
+document.querySelectorAll('.stage-controls button').forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll('.stage-controls button').forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+    const v = b.dataset.view;
+    if (v === 'iso')   { camYaw = Math.PI*0.25; camPitch = Math.PI*0.25; camDist = 7.5; }
+    if (v === 'top')   { camYaw = 0;            camPitch = Math.PI*0.48; camDist = 7.5; }
+    if (v === 'front') { camYaw = 0;            camPitch = Math.PI*0.08; camDist = 7.0; }
+    if (v === 'cut')   { camYaw = Math.PI*0.45; camPitch = Math.PI*0.18; camDist = 6.0; }
+  };
+});
+
+function resize3D() {
+  const stage = $('stage3d');
+  const rect = stage.getBoundingClientRect();
+  const w = rect.width, h = rect.height;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+
+function animate3D() {
+  requestAnimationFrame(animate3D);
+  // smooth camera position
+  camera.position.x = camTarget.x + Math.cos(camYaw) * Math.cos(camPitch) * camDist;
+  camera.position.z = camTarget.z + Math.sin(camYaw) * Math.cos(camPitch) * camDist;
+  camera.position.y = camTarget.y + Math.sin(camPitch) * camDist;
+  camera.lookAt(camTarget);
+  // animate halos / orchestrator pulse
+  const t = performance.now() * 0.001;
+  for (const key of Object.keys(modulesMesh)) {
+    const m = modulesMesh[key];
+    if (m.userData.halo && !state.faults[key]) {
+      const s = 1.4 + Math.sin(t * 2 + key.length) * 0.08;
+      m.userData.halo.scale.setScalar(s);
+    }
+    if (key === 'orchestrator' && !state.faults[key]) {
+      m.rotation.y += 0.005;
+      m.rotation.x += 0.003;
+    }
+  }
+  // animate particles drift
+  for (const k of ['pm','mb','gas']) {
+    const sys = particleSystems[k]; if (!sys) continue;
+    const pos = sys.geometry.attributes.position;
+    const vel = sys.geometry.userData.vel;
+    for (let i = 0; i < sys.geometry.userData.count; i++) {
+      pos.array[i*3+0] += vel[i*3+0];
+      pos.array[i*3+1] += vel[i*3+1];
+      pos.array[i*3+2] += vel[i*3+2];
+      // bounds
+      if (Math.abs(pos.array[i*3+0]) > 0.95) vel[i*3+0] *= -1;
+      if (pos.array[i*3+1] < 0.1 || pos.array[i*3+1] > 2.85) vel[i*3+1] *= -1;
+      if (Math.abs(pos.array[i*3+2]) > 0.95) vel[i*3+2] *= -1;
+    }
+    pos.needsUpdate = true;
+  }
+  // animate dashed lines moving
+  for (const ml of meshLines) {
+    ml.line.material.dashSize = 0.05 + Math.sin(t * 3) * 0.01;
+  }
+  renderer.render(scene, camera);
+}
+
+// ─── Boot ─────────────────────────────────────────────────────
+renderModules();
+renderScenarios();
+updateReadings();
+updateMeshHealth();
+init3D();
+log('INFO', 'Ready · select a scenario or set initial conditions, then trigger DIAPS');
+</script>
+
+</body>
+</html>
